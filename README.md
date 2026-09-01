@@ -35,6 +35,17 @@ docker compose up -d --build
    - Effectuer d'abord une requête `POST /api/auth/login` (ou `/api/auth/register`) pour récupérer un **Token JWT**.
    - Ajouter l'en-tête `Authorization: Bearer <votre_token>` dans vos requêtes protégées (comme `GET /api/orders`, qui filtre automatiquement les commandes de l'utilisateur connecté).
 
+- Lister les utilisateurs dans la BDD : 
+`docker exec -it ecom_postgres psql -U postgres -d ecom_db -c "SELECT * FROM users;"`
+
+- Lister les produits
+` docker exec -it ecom_postgres psql -U postgres -d ecom_db -c "SELECT * FROM products;" `
+
+- Lister toutes les commandes
+`docker exec -it ecom_postgres psql -U postgres -d ecom_db -c "SELECT * FROM orders;" `
+
+
+
 4. Rafraîchir l'interface admin pour vérifier que la commande apparaît.
 
 5. Consulter les logs du worker pour valider son traitement asynchrone :
