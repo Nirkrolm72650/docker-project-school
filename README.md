@@ -54,6 +54,21 @@ docker compose up -d --build
    docker compose logs worker
    ```
 
+6. Changement de statut d'une commande (Admin) & Simulation d'E-mail
+Pour tester la mise à jour du statut d'une commande et vérifier le déclenchement de la notification par e-mail :
+
+- **Méthode** : `PUT`
+- **URL** : `http://localhost:3000/api/admin/orders/:id/status` *(remplacer `:id` par l'identifiant de la commande, ex: `1`)*
+- **Header** : `Authorization: Bearer <token_jwt_administrateur>`
+- **Body (JSON)** :
+    ```json
+        {
+            "status": "shipped"
+        }
+    ```
+#### Vérification de la simulation d'email
+```bash docker logs -f ecom_backend```
+
 ## Arrêt
 ```bash
 docker compose down        # Arrête tous les conteneurs et réseaux
