@@ -223,13 +223,30 @@ app.get('/api/admin/orders', verifyAdmin, async (req, res) => {
 });
 
 // [PUT] Modifier le statut d'une commande (Admin uniquement)
+// [PUT] Modifier le statut d'une commande (Admin uniquement)
 app.put('/api/admin/orders/:id/status', verifyAdmin, async (req, res) => {
   const { status } = req.body; // ex: 'paid', 'shipped', 'delivered', 'cancelled'
   try {
+    // 1. Mise à jour du statut en base
     const result = await pool.query('UPDATE orders SET status = $1 WHERE id = $2 RETURNING *', [status, req.params.id]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Commande non trouvée.' });
-    res.json(result.rows[0]);
+    
+    const updatedOrder = result.rows[0];
+
+    // 2. Récupérer l'e-mail de l'utilisateur lié à cette commande pour le notifier
+    const userRes = await pool.query('SELECT email FROM users WHERE id = $1', [updatedOrder.user_id]);
+    if (userRes.rows.length > 0) {
+      const userEmail = userRes.rows[0].email;
+      await sendEmail(
+        userEmail, 
+        `Mise à jour de votre commande #${updatedOrder.id}`, 
+        `Bonjour,\n\nLe statut de votre commande #${updatedOrder.id} a été mis à jour : "${updatedOrder.status}".\n\nMerci pour votre confiance !`
+      );
+    }
+
+    res.json({ message: 'Statut mis à jour et email envoyé avec succès', order: updatedOrder });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Erreur lors de la mise à jour du statut.' });
   }
 });
