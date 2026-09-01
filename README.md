@@ -10,6 +10,7 @@ Dupliquez le fichier .env.example en un fichier .env et renseignez vos propres i
 
 ## Démarrage
 ```bash
+cp .env.example .env
 docker compose up -d --build
 ```
 

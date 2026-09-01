@@ -9,7 +9,7 @@ const transporter = nodemailer.createTransport({
 });
 
 const sendEmail = async (to, subject, text) => {
-  if (!process.env.EMAIL_USER || process.env.EMAIL_USER === 'guyonbrandon@outlook.fr') {
+  if (!process.env.EMAIL_USER || process.env.EMAIL_USER === !process.env.EMAIL_PASS) {
     console.log(`[SIMULATION EMAIL] 📧 Destinataire: ${to} | Sujet: ${subject} | Message: ${text}`);
     return true;
   }
