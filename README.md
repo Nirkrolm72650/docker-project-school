@@ -31,8 +31,13 @@ docker compose up -d --build
      -H "Authorization: Bearer VOTRE_TOKEN_JWT" \
      -d '{"items": [{"product_id": 1, "quantity": 1}], "shipping_address": "12 rue de la Paix, Paris"}'
    ```
-3. Rafraîchir l'interface admin pour vérifier que la commande apparaît.
-4. Consulter les logs du worker pour valider son traitement asynchrone :
+3. Pour tester l'API via Postman :
+   - Effectuer d'abord une requête `POST /api/auth/login` (ou /api/auth/register) pour récupérer un **Token JWT**.
+   - Ajouter l'en-tête `Authorization: Bearer <votre_token>` dans vos requêtes protégées (comme `GET /api/orders`, qui filtre automatiquement les commandes de l'utilisateur connecté).
+
+4. Rafraîchir l'interface admin pour vérifier que la commande apparaît.
+
+5. Consulter les logs du worker pour valider son traitement asynchrone :
    ```bash
    docker compose logs worker
    ```
