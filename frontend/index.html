@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-Shop Pro - Accueil</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 flex flex-col min-h-screen">
+
+    <!-- Header & Navigation -->
+    <header class="bg-white shadow-sm sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-indigo-600">E-Shop</h1>
+            <nav class="hidden md:flex space-x-8 items-center">
+                <a href="#" class="text-gray-600 hover:text-indigo-600">Accueil</a>
+                <a href="#products" class="text-gray-600 hover:text-indigo-600">Produits</a>
+                <a href="admin.html" class="text-gray-500 hover:text-indigo-600 text-sm">Admin</a>
+            </nav>
+            <div class="flex items-center space-x-4">
+                <div id="auth-container">
+                    <button onclick="openAuthModal()" class="text-sm font-medium text-indigo-600 hover:text-indigo-800">Connexion / Inscription</button>
+                </div>
+                <button onclick="toggleCartModal()" class="relative bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition flex items-center">
+                    <span>Panier</span>
+                    <span id="cart-count" class="ml-2 bg-white text-indigo-600 text-xs font-bold px-2 py-0.5 rounded-full">0</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="bg-indigo-900 text-white">
+        <div class="max-w-7xl mx-auto px-4 py-16 text-center">
+            <h2 class="text-4xl md:text-5xl font-extrabold mb-4">Commandez vos articles préférés</h2>
+            <p class="text-lg text-indigo-200 mb-8 max-w-xl mx-auto">Propulsé par Node.js, PostgreSQL et Docker.</p>
+            <a href="#products" class="bg-white text-indigo-900 px-8 py-3 rounded-full font-bold hover:bg-gray-100 transition">Explorer le catalogue</a>
+        </div>
+    </section>
+
+    <!-- Grille de Produits -->
+    <main id="products" class="flex-grow max-w-7xl mx-auto px-4 py-12 w-full">
+        <h3 class="text-3xl font-bold text-gray-800 mb-8 text-center">Nos Produits</h3>
+        <div id="product-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <p class="col-span-full text-center text-gray-500">Chargement...</p>
+        </div>
+    </main>
+
+    <!-- Modale Panier / Commande -->
+    <div id="cart-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex justify-end">
+        <div class="bg-white w-full max-w-md h-full p-6 flex flex-col shadow-xl">
+            <div class="flex justify-between items-center border-b pb-4">
+                <h3 class="text-xl font-bold">Votre Panier</h3>
+                <button onclick="toggleCartModal()" class="text-gray-500 hover:text-black font-bold text-xl">&times;</button>
+            </div>
+            <div id="cart-items" class="flex-grow overflow-y-auto py-4 space-y-4">
+                <!-- Articles injectés ici -->
+            </div>
+            <div class="border-t pt-4">
+                <div class="flex justify-between mb-4 font-bold text-lg">
+                    <span>Total :</span>
+                    <span id="cart-total">0.00 €</span>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Adresse de livraison</label>
+                    <input type="text" id="shipping-address" placeholder="12 rue de la Paix, Paris" class="w-full border rounded-lg px-3 py-2 text-sm">
+                </div>
+                <button onclick="checkout()" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition">Valider la commande</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modale Auth (Connexion / Inscription) -->
+    <div id="auth-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+        <div class="bg-white w-full max-w-md p-8 rounded-xl shadow-xl relative">
+            <button onclick="openAuthModal()" class="absolute top-4 right-4 text-gray-500 hover:text-black font-bold text-xl">&times;</button>
+            <h3 id="auth-title" class="text-2xl font-bold mb-6 text-center">Connexion Client</h3>
+            
+            <div id="auth-error" class="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm hidden"></div>
+
+            <form id="auth-form" onsubmit="handleAuth(event)" class="space-y-4">
+                <div id="name-fields" class="hidden grid grid-cols-2 gap-4">
+                    <input type="text" id="first_name" placeholder="Prénom" class="border p-2 rounded w-full">
+                    <input type="text" id="last_name" placeholder="Nom" class="border p-2 rounded w-full">
+                </div>
+                <input type="email" id="email" placeholder="Email" required class="border p-2 rounded w-full">
+                <input type="password" id="password" placeholder="Mot de passe" required class="border p-2 rounded w-full">
+                <button type="submit" id="auth-submit-btn" class="w-full bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700">Se connecter</button>
+            </form>
+
+            <div class="mt-4 text-center text-sm">
+                <button onclick="toggleAuthMode()" id="auth-switch-text" class="text-indigo-600 hover:underline">Pas encore de compte ? S'inscrire</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-gray-900 text-gray-400 py-6 text-center mt-auto">
+        <p>&copy; 2026 E-Shop Docker.</p>
+    </footer>
+
+    <script src="js/app.js"></script>
+</body>
+</html>

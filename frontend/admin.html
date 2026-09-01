@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin - E-Commerce</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+
+    <!-- Vue non connectée -->
+    <div id="login-container" class="min-h-screen flex items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-xl shadow-xl w-full max-w-md">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 text-center">Connexion Administrateur</h2>
+            <div id="login-error" class="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm hidden"></div>
+            <form onsubmit="handleAdminLogin(event)" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input type="email" id="admin-email-input" required class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Mot de passe</label>
+                    <input type="password" id="admin-password-input" required class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 text-white py-2.5 rounded-lg font-bold hover:bg-indigo-700 transition">Se connecter</button>
+            </form>
+            <div class="mt-6 text-center">
+                <a href="index.html" class="text-sm text-gray-500 hover:text-indigo-600">&larr; Retour à la boutique</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vue Dashboard Admin -->
+    <div id="dashboard-container" class="min-h-screen flex hidden">
+        <aside class="w-64 bg-gray-900 text-white hidden md:flex flex-col">
+            <div class="p-6 text-2xl font-bold border-b border-gray-700">Admin Panel</div>
+            <nav class="flex-grow p-4 space-y-2">
+                <a href="#" onclick="switchTab('orders')" id="nav-orders" class="block py-2.5 px-4 rounded bg-gray-800 text-white transition">Commandes</a>
+                <a href="#" onclick="switchTab('users')" id="nav-users" class="block py-2.5 px-4 rounded hover:bg-gray-800 transition">Utilisateurs</a>
+            </nav>
+            <div class="p-4 border-t border-gray-700">
+                <button onclick="logout()" class="w-full bg-red-600 text-white py-2 rounded hover:bg-red-700 text-sm font-medium">Déconnexion</button>
+            </div>
+        </aside>
+
+        <main class="flex-1 p-8 overflow-y-auto">
+            <header class="flex justify-between items-center mb-8">
+                <h2 id="page-title" class="text-3xl font-semibold text-gray-800">Gestion des Commandes</h2>
+            </header>
+
+            <!-- Section Commandes (existante) -->
+            <div id="section-orders" class="bg-white rounded-lg shadow overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-gray-50 text-gray-600 text-sm uppercase border-b">
+                                <th class="p-4">ID</th>
+                                <th class="p-4">Client</th>
+                                <th class="p-4">Montant</th>
+                                <th class="p-4">Date</th>
+                                <th class="p-4">Statut</th>
+                            </tr>
+                        </thead>
+                        <tbody id="orders-table-body" class="divide-y divide-gray-200 text-sm"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- NOUVELLE Section Utilisateurs -->
+            <div id="section-users" class="bg-white rounded-lg shadow overflow-hidden hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-gray-50 text-gray-600 text-sm uppercase border-b">
+                                <th class="p-4">ID</th>
+                                <th class="p-4">Nom</th>
+                                <th class="p-4">Email</th>
+                                <th class="p-4">Rôle</th>
+                                <th class="p-4">Inscription</th>
+                                <th class="p-4">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-table-body" class="divide-y divide-gray-200 text-sm"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+
+        document.addEventListener('DOMContentLoaded', checkAuth);
+
+        function checkAuth() {
+            const token = localStorage.getItem('jwt_token');
+            const role = localStorage.getItem('user_role');
+            if (token && role === 'admin') {
+                document.getElementById('login-container').classList.add('hidden');
+                document.getElementById('dashboard-container').classList.remove('hidden');
+                switchTab('orders');
+            } else {
+                document.getElementById('login-container').classList.remove('hidden');
+                document.getElementById('dashboard-container').classList.add('hidden');
+            }
+        }
+
+        async function handleAdminLogin(event) {
+            event.preventDefault();
+            const email = document.getElementById('admin-email-input').value;
+            const password = document.getElementById('admin-password-input').value;
+            try {
+                const response = await fetch(`${API_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error);
+                if (data.role !== 'admin') throw new Error('Accès refusé');
+                localStorage.setItem('jwt_token', data.token);
+                localStorage.setItem('user_role', data.role);
+                checkAuth();
+            } catch (err) {
+                document.getElementById('login-error').innerText = err.message;
+                document.getElementById('login-error').classList.remove('hidden');
+            }
+        }
+
+        /* CRUD UTILISATEURS */
+        async function loadAdminUsers() {
+            const token = localStorage.getItem('jwt_token');
+            const tbody = document.getElementById('users-table-body');
+            try {
+                const response = await fetch(`${API_URL}/admin/users`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const users = await response.json();
+                tbody.innerHTML = '';
+                users.forEach(u => {
+                    tbody.insertAdjacentHTML('beforeend', `
+                        <tr class="hover:bg-gray-50">
+                            <td class="p-4 font-bold text-indigo-600">#${u.id}</td>
+                            <td class="p-4">${u.first_name} ${u.last_name}</td>
+                            <td class="p-4">${u.email}</td>
+                            <td class="p-4">
+                                <select onchange="updateUserRole(${u.id}, this.value)" class="border rounded p-1 text-xs bg-white">
+                                    <option value="client" ${u.role === 'client' ? 'selected' : ''}>Client</option>
+                                    <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
+                                </select>
+                            </td>
+                            <td class="p-4 text-gray-500 text-xs">${new Date(u.created_at).toLocaleDateString()}</td>
+                            <td class="p-4">
+                                <button onclick="deleteUser(${u.id})" class="text-red-600 hover:text-red-800 font-bold text-xs">Supprimer</button>
+                            </td>
+                        </tr>
+                    `);
+                });
+            } catch (err) { console.error(err); }
+        }
+
+        async function updateUserRole(id, role) {
+            const token = localStorage.getItem('jwt_token');
+            await fetch(`${API_URL}/admin/users/${id}/role`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ role })
+            });
+        }
+
+        async function deleteUser(id) {
+            if (!confirm('Supprimer cet utilisateur définitivement ?')) return;
+            const token = localStorage.getItem('jwt_token');
+            await fetch(`${API_URL}/admin/users/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            loadAdminUsers();
+        }
+
+            async function loadAdminOrders() {
+                const token = localStorage.getItem('jwt_token');
+                const tbody = document.getElementById('orders-table-body');
+                try {
+                    const response = await fetch(`${API_URL}/admin/orders`, { 
+                        headers: { 'Authorization': `Bearer ${token}` } 
+                    });
+                    const orders = await response.json();
+                    tbody.innerHTML = '';
+                    
+                    orders.forEach(o => {
+                        // Définition de la couleur du badge selon le statut
+                        let badgeClass = 'bg-yellow-100 text-yellow-800'; // pending par défaut
+                        if(o.status === 'paid') badgeClass = 'bg-blue-100 text-blue-800';
+                        if(o.status === 'shipped') badgeClass = 'bg-purple-100 text-purple-800';
+                        if(o.status === 'delivered') badgeClass = 'bg-green-100 text-green-800';
+                        if(o.status === 'cancelled') badgeClass = 'bg-red-100 text-red-800';
+
+                        tbody.insertAdjacentHTML('beforeend', `
+                            <tr class="hover:bg-gray-50">
+                                <td class="p-4 font-bold text-gray-700">#${o.id}</td>
+                                <td class="p-4">${o.user_email || `User #${o.user_id}`}</td>
+                                <td class="p-4 font-semibold">${o.total_amount} €</td>
+                                <td class="p-4 text-gray-500 text-xs">${new Date(o.created_at).toLocaleDateString()}</td>
+                                <td class="p-4">
+                                    <select onchange="updateOrderStatus(${o.id}, this.value)" class="border border-transparent rounded-full px-3 py-1 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer ${badgeClass}">
+                                        <option value="pending" ${o.status === 'pending' ? 'selected' : ''} class="bg-white text-black">En attente</option>
+                                        <option value="paid" ${o.status === 'paid' ? 'selected' : ''} class="bg-white text-black">Payé</option>
+                                        <option value="shipped" ${o.status === 'shipped' ? 'selected' : ''} class="bg-white text-black">Expédié</option>
+                                        <option value="delivered" ${o.status === 'delivered' ? 'selected' : ''} class="bg-white text-black">Livré</option>
+                                        <option value="cancelled" ${o.status === 'cancelled' ? 'selected' : ''} class="bg-white text-black">Annulé</option>
+                                    </select>
+                                </td>
+                            </tr>
+                        `);
+                    });
+                } catch (err) { 
+                    console.error("Erreur de chargement des commandes:", err); 
+                }
+            }
+
+            async function updateOrderStatus(orderId, newStatus) {
+                const token = localStorage.getItem('jwt_token');
+                try {
+                    await fetch(`${API_URL}/admin/orders/${orderId}/status`, {
+                        method: 'PUT',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}` 
+                        },
+                        body: JSON.stringify({ status: newStatus })
+                    });
+                    // Recharge le tableau pour appliquer la nouvelle couleur de badge
+                    loadAdminOrders();
+                } catch (err) {
+                    console.error("Erreur lors de la mise à jour du statut:", err);
+                }
+            }
+
+        function switchTab(tab) {
+            document.getElementById('section-orders').classList.add('hidden');
+            document.getElementById('section-users').classList.add('hidden');
+            document.getElementById('nav-orders').classList.remove('bg-gray-800');
+            document.getElementById('nav-users').classList.remove('bg-gray-800');
+
+            if (tab === 'orders') {
+                document.getElementById('section-orders').classList.remove('hidden');
+                document.getElementById('nav-orders').classList.add('bg-gray-800');
+                document.getElementById('page-title').innerText = "Gestion des Commandes";
+                loadAdminOrders();
+            } else if (tab === 'users') {
+                document.getElementById('section-users').classList.remove('hidden');
+                document.getElementById('nav-users').classList.add('bg-gray-800');
+                document.getElementById('page-title').innerText = "Gestion des Utilisateurs";
+                loadAdminUsers();
+            }
+        }
+
+        function logout() {
+            localStorage.clear(); // Supprime le token et les données admin
+            window.location.href = 'index.html'; // Redirection immédiate vers la boutique
+        }
+    </script>
+</body>
+</html>
