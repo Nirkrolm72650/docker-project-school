@@ -3,6 +3,7 @@ const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
+const PDFDocument = require('pdfkit');
 
 const pool = require('./models/db');
 const { sendEmail } = require('./services/emailService');
@@ -182,9 +183,30 @@ app.post('/api/orders', verifyToken, async (req, res) => {
     await client.query('COMMIT'); // Validation de la transaction
 
     // Envoi d'un email de confirmation de commande
-    const userRes = await pool.query('SELECT email FROM users WHERE id = $1', [req.user.id]);
+// Envoi de la facture PDF et email de confirmation avec pièce jointe
+    const userRes = await pool.query('SELECT email, first_name, last_name FROM users WHERE id = $1', [req.user.id]);
     if (userRes.rows.length > 0) {
-      await sendEmail(userRes.rows[0].email, 'Confirmation de votre commande', `Votre commande #${order.id} d'un montant total de ${total_amount}€ a bien été prise en compte.`);
+      const user = userRes.rows[0];
+
+      const itemsForPDF = [];
+      for (let item of evaluatedItems) {
+        const pRes = await client.query('SELECT name FROM products WHERE id = $1', [item.product_id]);
+        itemsForPDF.push({
+          name: pRes.rows[0].name,
+          quantity: item.quantity,
+          price: item.price,
+          subtotal: item.price * item.quantity
+        });
+      }
+
+      const pdfBuffer = await generateInvoicePDF(order, user, itemsForPDF);
+      await sendEmailWithAttachment(
+        user.email,
+        `Facture de votre commande #${order.id}`,
+        `Bonjour ${user.first_name || ''},\n\nVotre commande #${order.id} d'un montant total de ${total_amount}€ a bien été prise en compte.\nVous trouverez ci-jointe votre facture officielle.`,
+        pdfBuffer,
+        `facture-${order.id}.pdf`
+      );
     }
 
     res.status(201).json({ message: 'Commande passée avec succès', order });
@@ -251,6 +273,149 @@ app.put('/api/admin/orders/:id/status', verifyAdmin, async (req, res) => {
   }
 });
 
+// [GET] Statistiques & Reporting pour le dashboard Admin
+app.get('/api/admin/reports', verifyAdmin, async (req, res) => {
+  try {
+    // 1. Chiffre d'affaires total (en excluant les commandes annulées)
+    const revenueQuery = `
+      SELECT COALESCE(SUM(total_amount), 0) AS total_revenue 
+      FROM orders 
+      WHERE status != 'cancelled';
+    `;
+    const revenueRes = await pool.query(revenueQuery);
+
+    // 2. Nombre total de commandes
+    const ordersCountQuery = `SELECT COUNT(*) AS total_orders FROM orders;`;
+    const ordersCountRes = await pool.query(ordersCountQuery);
+
+    // 3. Nombre total de clients enregistrés
+    const clientsCountQuery = `SELECT COUNT(*) AS total_clients FROM users WHERE role = 'client';`;
+    const clientsCountRes = await pool.query(clientsCountQuery);
+
+    // 4. Répartition des commandes par statut (parfait pour alimenter un graphique)
+    const statusQuery = `
+      SELECT status, COUNT(*) AS count 
+      FROM orders 
+      GROUP BY status;
+    `;
+    const statusRes = await pool.query(statusQuery);
+
+    res.json({
+      total_revenue: parseFloat(revenueRes.rows[0].total_revenue),
+      total_orders: parseInt(ordersCountRes.rows[0].total_orders, 10),
+      total_clients: parseInt(clientsCountRes.rows[0].total_clients, 10),
+      orders_by_status: statusRes.rows
+    });
+  } catch (err) {
+    console.error("Erreur lors de la récupération des rapports :", err);
+    res.status(500).json({ error: 'Erreur serveur lors du calcul des statistiques.' });
+  }
+});
+
+// Fonction de génération du PDF
+function generateInvoicePDF(order, user, items) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 50 });
+    const buffers = [];
+
+    doc.on('data', chunk => buffers.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(buffers)));
+    doc.on('error', err => reject(err));
+
+    // --- En-tête de la facture ---
+    doc.fontSize(20).text('FACTURE OFFICIELLE', { align: 'right' });
+    doc.fontSize(10).text(`Facture N° : FAC-${order.id}`, { align: 'right' });
+    doc.text(`Date : ${new Date(order.created_at).toLocaleDateString()}`, { align: 'right' });
+    doc.moveDown();
+
+    // --- Infos Entreprise / Client ---
+    doc.fontSize(12).fillColor('#333333').text('E-Commerce Multi-Services', 50, 50);
+    doc.fontSize(10).text('12 Rue de la République');
+    doc.text('75001 Paris, France');
+    doc.text('contact@ecommerce-docker.com');
+    
+    doc.moveDown(2);
+    doc.fontSize(12).text(`Facturé à :`, 50, 150);
+    doc.fontSize(10).text(`${user.first_name || 'Client'} ${user.last_name || ''}`);
+    doc.text(`Email : ${user.email}`);
+    doc.text(`Adresse de livraison : ${order.shipping_address}`);
+
+    doc.moveDown(3);
+
+    // --- Tableau des articles ---
+    const tableTop = 240;
+    doc.fontSize(10).fillColor('#000000');
+    doc.text('Produit', 50, tableTop, { width: 250 });
+    doc.text('Quantité', 310, tableTop, { width: 60, align: 'center' });
+    doc.text('Prix Unitaire', 380, tableTop, { width: 80, align: 'right' });
+    doc.text('Total', 470, tableTop, { width: 80, align: 'right' });
+
+    doc.moveTo(50, tableTop + 15).lineTo(550, tableTop + 15).stroke();
+
+    let position = tableTop + 25;
+    items.forEach(item => {
+      doc.text(item.name, 50, position, { width: 250 });
+      doc.text(item.quantity.toString(), 310, position, { width: 60, align: 'center' });
+      doc.text(`${item.price} €`, 380, position, { width: 80, align: 'right' });
+      doc.text(`${item.subtotal} €`, 470, position, { width: 80, align: 'right' });
+      position += 20;
+    });
+
+    doc.moveTo(50, position + 5).lineTo(550, position + 5).stroke();
+
+    // --- Total ---
+    doc.moveDown(2);
+    doc.fontSize(12).text(`Montant Total : ${order.total_amount} €`, { align: 'right' });
+
+    // --- Pied de page ---
+    doc.fontSize(8).fillColor('#777777').text(
+      'Document généré automatiquement par la plateforme E-Commerce Docker - Merci pour votre achat !', 
+      50, 750, { align: 'center', width: 500 }
+    );
+
+    doc.end();
+  });
+}
+
+// Fonction d'envoi d'e-mail avec Nodemailer (et support de la simulation)
+async function sendEmailWithAttachment(to, subject, text, pdfBuffer, filename) {
+  // Si tu utilises nodemailer configuré :
+  if (process.env.SMTP_HOST && process.env.SMTP_HOST !== 'smtp.example.com') {
+    const nodemailer = require('nodemailer');
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT || 587,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    });
+
+    await transporter.sendMail({
+      from: '"E-Commerce Support" <no-reply@ecommerce.com>',
+      to,
+      subject,
+      text,
+      attachments: [
+        {
+          filename: filename,
+          content: pdfBuffer,
+          contentType: 'application/pdf'
+        }
+      ]
+    });
+    console.log(`[EMAIL RÉEL] Facture envoyée à ${to} avec la pièce jointe ${filename}`);
+  } else {
+    // Mode Simulation (très pratique pour l'évaluation sans vraie configuration SMTP)
+    console.log(`\n========================================`);
+    console.log(`[SIMULATION EMAIL AVEC FACTURE PDF]`);
+    console.log(`📧 Destinataire : ${to}`);
+    console.log(`📋 Sujet : ${subject}`);
+    console.log(`📎 Pièce jointe : ${filename} (${pdfBuffer.length} octets générés)`);
+    console.log(`✉️ Message :\n${text}`);
+    console.log(`========================================\n`);
+  }
+}
 
 
 // Lancement du serveur

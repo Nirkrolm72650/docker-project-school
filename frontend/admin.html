@@ -33,9 +33,10 @@
     <div id="dashboard-container" class="min-h-screen flex hidden">
         <aside class="w-64 bg-gray-900 text-white hidden md:flex flex-col">
             <div class="p-6 text-2xl font-bold border-b border-gray-700">Admin Panel</div>
-            <nav class="flex-grow p-4 space-y-2">
+             <nav class="flex-grow p-4 space-y-2">
                 <a href="#" onclick="switchTab('orders')" id="nav-orders" class="block py-2.5 px-4 rounded bg-gray-800 text-white transition">Commandes</a>
-                <a href="#" onclick="switchTab('users')" id="nav-users" class="block py-2.5 px-4 rounded hover:bg-gray-800 transition">Utilisateurs</a>
+                <a href="#" onclick="switchTab('users')" id="nav-users" class="block py-2.5 px-4 rounded hover:bg-gray-800 transition text-white">Utilisateurs</a>
+                <a href="admin-reports.html" id="nav-reports" class="block py-2.5 px-4 rounded hover:bg-gray-800 transition text-white">Reporting & Statistiques</a>
             </nav>
             <div class="p-4 border-t border-gray-700">
                 <button onclick="logout()" class="w-full bg-red-600 text-white py-2 rounded hover:bg-red-700 text-sm font-medium">Déconnexion</button>
