@@ -17,6 +17,15 @@ services:
       timeout: 5s
       retries: 5
 
+  pdf-service:
+    build: ./pdf-service
+    container_name: ecom_pdf_service
+    ports:
+      - "4000:4000"
+    networks:
+      - back-net
+    restart: always
+
   backend:
     build: ./backend
     container_name: ecom_backend
@@ -30,6 +39,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       EMAIL_USER: ${EMAIL_USER}
       EMAIL_PASS: ${EMAIL_PASS}
+      PDF_SERVICE_URL: ${PDF_SERVICE_URL}
     ports:
       - "3000:3000"
     env_file:

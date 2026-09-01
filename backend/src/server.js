@@ -3,7 +3,6 @@ const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
-const PDFDocument = require('pdfkit');
 
 const pool = require('./models/db');
 const { sendEmail } = require('./services/emailService');
@@ -182,8 +181,7 @@ app.post('/api/orders', verifyToken, async (req, res) => {
 
     await client.query('COMMIT'); // Validation de la transaction
 
-    // Envoi d'un email de confirmation de commande
-// Envoi de la facture PDF et email de confirmation avec pièce jointe
+// Récupération des informations utilisateur et préparation des données pour le micro-service PDF
     const userRes = await pool.query('SELECT email, first_name, last_name FROM users WHERE id = $1', [req.user.id]);
     if (userRes.rows.length > 0) {
       const user = userRes.rows[0];
@@ -199,7 +197,18 @@ app.post('/api/orders', verifyToken, async (req, res) => {
         });
       }
 
-      const pdfBuffer = await generateInvoicePDF(order, user, itemsForPDF);
+      // --- APPEL AU MICRO-SERVICE PDF DISTANT (via Docker) ---
+      const pdfResponse = await fetch(process.env.PDF_SERVICE_URL || 'http://pdf-service:4000/generate-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order, user, items: itemsForPDF })
+      });
+
+      if (!pdfResponse.ok) throw new Error('Erreur lors de la génération du PDF par le micro-service.');
+      const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
+      // --------------------------------------------------------
+
+      // Envoi de l'e-mail avec la pièce jointe reçue du micro-service
       await sendEmailWithAttachment(
         user.email,
         `Facture de votre commande #${order.id}`,
@@ -312,70 +321,6 @@ app.get('/api/admin/reports', verifyAdmin, async (req, res) => {
   }
 });
 
-// Fonction de génération du PDF
-function generateInvoicePDF(order, user, items) {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 50 });
-    const buffers = [];
-
-    doc.on('data', chunk => buffers.push(chunk));
-    doc.on('end', () => resolve(Buffer.concat(buffers)));
-    doc.on('error', err => reject(err));
-
-    // --- En-tête de la facture ---
-    doc.fontSize(20).text('FACTURE OFFICIELLE', { align: 'right' });
-    doc.fontSize(10).text(`Facture N° : FAC-${order.id}`, { align: 'right' });
-    doc.text(`Date : ${new Date(order.created_at).toLocaleDateString()}`, { align: 'right' });
-    doc.moveDown();
-
-    // --- Infos Entreprise / Client ---
-    doc.fontSize(12).fillColor('#333333').text('E-Commerce Multi-Services', 50, 50);
-    doc.fontSize(10).text('12 Rue de la République');
-    doc.text('75001 Paris, France');
-    doc.text('contact@ecommerce-docker.com');
-    
-    doc.moveDown(2);
-    doc.fontSize(12).text(`Facturé à :`, 50, 150);
-    doc.fontSize(10).text(`${user.first_name || 'Client'} ${user.last_name || ''}`);
-    doc.text(`Email : ${user.email}`);
-    doc.text(`Adresse de livraison : ${order.shipping_address}`);
-
-    doc.moveDown(3);
-
-    // --- Tableau des articles ---
-    const tableTop = 240;
-    doc.fontSize(10).fillColor('#000000');
-    doc.text('Produit', 50, tableTop, { width: 250 });
-    doc.text('Quantité', 310, tableTop, { width: 60, align: 'center' });
-    doc.text('Prix Unitaire', 380, tableTop, { width: 80, align: 'right' });
-    doc.text('Total', 470, tableTop, { width: 80, align: 'right' });
-
-    doc.moveTo(50, tableTop + 15).lineTo(550, tableTop + 15).stroke();
-
-    let position = tableTop + 25;
-    items.forEach(item => {
-      doc.text(item.name, 50, position, { width: 250 });
-      doc.text(item.quantity.toString(), 310, position, { width: 60, align: 'center' });
-      doc.text(`${item.price} €`, 380, position, { width: 80, align: 'right' });
-      doc.text(`${item.subtotal} €`, 470, position, { width: 80, align: 'right' });
-      position += 20;
-    });
-
-    doc.moveTo(50, position + 5).lineTo(550, position + 5).stroke();
-
-    // --- Total ---
-    doc.moveDown(2);
-    doc.fontSize(12).text(`Montant Total : ${order.total_amount} €`, { align: 'right' });
-
-    // --- Pied de page ---
-    doc.fontSize(8).fillColor('#777777').text(
-      'Document généré automatiquement par la plateforme E-Commerce Docker - Merci pour votre achat !', 
-      50, 750, { align: 'center', width: 500 }
-    );
-
-    doc.end();
-  });
-}
 
 // Fonction d'envoi d'e-mail avec Nodemailer (et support de la simulation)
 async function sendEmailWithAttachment(to, subject, text, pdfBuffer, filename) {
