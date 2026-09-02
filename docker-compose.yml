@@ -39,7 +39,17 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       EMAIL_USER: ${EMAIL_USER}
       EMAIL_PASS: ${EMAIL_PASS}
+<<<<<<< HEAD
       PDF_SERVICE_URL: ${PDF_SERVICE_URL}
+=======
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+      AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-http://host.docker.internal:4566}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-ecom-localstack-storage}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+>>>>>>> 177955d (Ajout de terraform + code pour AWS)
     ports:
       - "3000:3000"
     env_file:
@@ -66,6 +76,11 @@ services:
       - DB_NAME=${DB_NAME}
       - EMAIL_USER=${EMAIL_USER}
       - EMAIL_PASS=${EMAIL_PASS}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL:-http://host.docker.internal:4566}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-ecom-localstack-storage}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -81,6 +96,23 @@ services:
       - front-net
     depends_on:
       - backend
+
+  localstack:
+    image: localstack/localstack-pro:latest
+    container_name: ecom_localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=ec2,s3,iam,sts
+      - AWS_DEFAULT_REGION=us-east-1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - "./localstack_data:/var/lib/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    networks:
+      - back-net
+    profiles:
+      - with-localstack
 
 volumes:
   pgdata:

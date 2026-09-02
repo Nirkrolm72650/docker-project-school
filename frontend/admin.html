@@ -59,6 +59,7 @@
                                 <th class="p-4">Montant</th>
                                 <th class="p-4">Date</th>
                                 <th class="p-4">Statut</th>
+                                <th class="p-4">Facture S3</th>
                             </tr>
                         </thead>
                         <tbody id="orders-table-body" class="divide-y divide-gray-200 text-sm"></tbody>
@@ -211,11 +212,36 @@
                                         <option value="cancelled" ${o.status === 'cancelled' ? 'selected' : ''} class="bg-white text-black">Annulé</option>
                                     </select>
                                 </td>
+                                <td class="p-4">
+                                    <button onclick="downloadInvoice(${o.id})" class="inline-flex items-center space-x-1 text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1.5 rounded-md hover:bg-indigo-100 transition font-medium border border-indigo-200">
+                                        <span>📄 Télécharger (S3)</span>
+                                    </button>
+                                </td>
                             </tr>
                         `);
                     });
                 } catch (err) { 
                     console.error("Erreur de chargement des commandes:", err); 
+                }
+            }
+
+            async function downloadInvoice(orderId) {
+                const token = localStorage.getItem('jwt_token');
+                try {
+                    const response = await fetch(`${API_URL}/orders/${orderId}/invoice`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (!response.ok) throw new Error('Facture introuvable ou erreur de récupération S3');
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `facture-${orderId}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                } catch (err) {
+                    alert(err.message);
                 }
             }
 

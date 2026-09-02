@@ -7,6 +7,7 @@ require('dotenv').config();
 const pool = require('./models/db');
 const { sendEmail } = require('./services/emailService');
 const { verifyToken, verifyAdmin } = require('./middleware/authMiddleware');
+const { uploadInvoice, getInvoiceStream, checkBucketHealth } = require('./services/s3Service');
 
 const app = express();
 app.use(cors());
@@ -197,6 +198,7 @@ app.post('/api/orders', verifyToken, async (req, res) => {
         });
       }
 
+<<<<<<< HEAD
       // --- APPEL AU MICRO-SERVICE PDF DISTANT (via Docker) ---
       const pdfResponse = await fetch(process.env.PDF_SERVICE_URL || 'http://pdf-service:4000/generate-invoice', {
         method: 'POST',
@@ -209,6 +211,18 @@ app.post('/api/orders', verifyToken, async (req, res) => {
       // --------------------------------------------------------
 
       // Envoi de l'e-mail avec la pièce jointe reçue du micro-service
+=======
+      const pdfBuffer = await generateInvoicePDF(order, user, itemsForPDF);
+
+      // Upload de la facture vers S3 LocalStack
+      let s3Result = null;
+      try {
+        s3Result = await uploadInvoice(order.id, pdfBuffer);
+      } catch (s3Err) {
+        console.warn('[S3 WARNING] Impossible d\'uploader la facture dans S3:', s3Err.message);
+      }
+
+>>>>>>> 177955d (Ajout de terraform + code pour AWS)
       await sendEmailWithAttachment(
         user.email,
         `Facture de votre commande #${order.id}`,
@@ -216,6 +230,17 @@ app.post('/api/orders', verifyToken, async (req, res) => {
         pdfBuffer,
         `facture-${order.id}.pdf`
       );
+
+      res.status(201).json({
+        message: 'Commande passée avec succès',
+        order,
+        invoice: {
+          s3_uploaded: !!s3Result,
+          s3_key: s3Result ? s3Result.key : null,
+          download_url: `/api/orders/${order.id}/invoice`,
+        }
+      });
+      return;
     }
 
     res.status(201).json({ message: 'Commande passée avec succès', order });
@@ -225,6 +250,39 @@ app.post('/api/orders', verifyToken, async (req, res) => {
   } finally {
     client.release();
   }
+});
+
+// [GET] Télécharger / consulter une facture depuis S3 (Client ou Admin)
+app.get('/api/orders/:id/invoice', verifyToken, async (req, res) => {
+  try {
+    const orderRes = await pool.query('SELECT * FROM orders WHERE id = $1', [req.params.id]);
+    if (orderRes.rows.length === 0) return res.status(404).json({ error: 'Commande non trouvée.' });
+
+    const order = orderRes.rows[0];
+    if (req.user.role !== 'admin' && order.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Accès non autorisé à cette facture.' });
+    }
+
+    const { stream, contentType } = await getInvoiceStream(order.id);
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `inline; filename="facture-${order.id}.pdf"`);
+    stream.pipe(res);
+  } catch (err) {
+    console.error('[INVOICE ROUTE ERROR]', err.message);
+    res.status(500).json({ error: 'Erreur lors de la récupération de la facture depuis S3.' });
+  }
+});
+
+// [GET] Vérifier le statut de l'intégration AWS / LocalStack
+app.get('/api/aws/status', async (req, res) => {
+  const isS3Healthy = await checkBucketHealth();
+  res.json({
+    status: 'online',
+    aws_region: process.env.AWS_REGION || 'us-east-1',
+    aws_endpoint: process.env.AWS_ENDPOINT_URL || 'http://localhost:4566',
+    s3_bucket: process.env.S3_BUCKET_NAME || 'ecom-localstack-storage',
+    s3_healthy: isS3Healthy,
+  });
 });
 
 // [GET] Voir l'historique de ses commandes (Client)

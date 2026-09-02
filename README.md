@@ -1,76 +1,189 @@
-# E-Commerce Multi-Services Docker
+# E-Commerce Cloud Platform - LocalStack & Terraform
 
-## Description
-Une application e-commerce complète orchestrée par Docker, composée d'une API de gestion, d'un catalogue produits, d'un système d'authentification JWT, d'un worker de traitement asynchrone des commandes et d'une interface web moderne.
+Plateforme e-commerce conteneurisée et migrée vers une infrastructure cloud locale **AWS / LocalStack**, entièrement modélisée et provisionnée en **Infrastructure as Code (IaC)** avec **Terraform**.
 
-## Prérequis
-- Docker Desktop récent avec `docker compose` (v2) fonctionnel
+---
 
-Dupliquez le fichier .env.example en un fichier .env et renseignez vos propres identifiants si vous souhaitez tester l'envoi d'e-mails, bien que le worker simule le traitement des commandes par défaut.
+## 🏛️ Architecture Cloud (LocalStack)
 
-## Démarrage
+L'application s'appuie sur une infrastructure AWS complète émulée par LocalStack :
+
+```
++-----------------------------------------------------------------------------------+
+| LOCALSTACK GATEWAY (http://localhost:4566)                                        |
+|                                                                                   |
+|  +-----------------------------------------------------------------------------+  |
+|  | VPC : ecom-vpc (10.0.0.0/16) - DNS Hostnames & Support Enabled              |  |
+|  | Internet Gateway : ecom-igw                                                 |  |
+|  |                                                                             |  |
+|  |  +-------------------------------------+ +-------------------------------+  |  |
+|  |  | Public Subnet (10.0.1.0/24)         | | Private Subnet (10.0.2.0/24)      |  |  |
+|  |  | AZ: us-east-1a                      | | AZ: us-east-1b                    |  |  |
+|  |  | Route Table -> IGW (0.0.0.0/0)      | | Table de routage interne          |  |  |
+|  |  |                                     | |                               |  |  |
+|  |  |  [EC2: ecom-web-app]                | |  [EC2: ecom-database]         |  |  |
+|  |  |  - IP: 10.0.1.4 (Public IP dispo)   | |  - IP: 10.0.2.4 (Isolée)      |  |  |
+|  |  |  - Frontend Web (Port 80/8080)      | |  - PostgreSQL (Port 5432)     |  |  |
+|  |  |  - Backend API (Port 3000)          | |  - SG: ecom-db-sg             |  |  |
+|  |  |  - Worker asynchrone                | |    (Ingress réservé Backend)  |  |  |
+|  |  |  - SG: frontend-sg & backend-sg     | +-------------------------------+  |  |
+|  |  |  - IAM Profile: ec2-profile         |                                    |  |
+|  |  +-----------------|-------------------+                                    |  |
+|  +--------------------|--------------------------------------------------------+  |
+|                       |                                                           |
+|                       v IAM Role & Policy (s3:PutObject, s3:GetObject, s3:List)   |
+|  +-----------------------------------------------------------------------------+  |
+|  | S3 BUCKET : ecom-localstack-storage                                         |  |
+|  | ├── invoices/  (Factures PDF générées automatiquement à la commande)        |  |
+|  | └── products/  (Assets et images des articles)                              |  |
+|  +-----------------------------------------------------------------------------+  |
++-----------------------------------------------------------------------------------+
+```
+
+---
+
+## 📦 Composants Provisionnés par Terraform
+
+| Ressource AWS | Nom / Identifiant | Description |
+|---|---|---|
+| **VPC** | `ecom-vpc` (`10.0.0.0/16`) | Réseau virtuel isolé avec résolution DNS activée |
+| **Subnet Public** | `ecom-public-subnet` (`10.0.1.0/24`) | Héberge les points d'accès Web et API |
+| **Subnet Privé** | `ecom-private-subnet` (`10.0.2.0/24`) | Héberge la base de données PostgreSQL |
+| **Internet Gateway** | `ecom-igw` | Passerelle de sortie Internet pour le sous-réseau public |
+| **Security Group** | `ecom-frontend-sg` | Ports autorisés : 80, 8080, 22 (SSH) |
+| **Security Group** | `ecom-backend-sg` | Port 3000 (API REST) et 22 |
+| **Security Group** | `ecom-db-sg` | Port 5432 autorisé strictement depuis le `backend-sg` |
+| **IAM Role & Policy** | `ecom-ec2-role` / `ecom-s3-access-policy` | Rôle EC2 avec droits de lecture/écriture sur S3 |
+| **Instance Profile** | `ecom-ec2-instance-profile` | Profil d'instance associé aux serveurs EC2 |
+| **S3 Bucket** | `ecom-localstack-storage` | Stockage des factures PDF (`invoices/`) et médias |
+| **EC2 Web & App** | `ecom-web-app` | Instance hébergeant Frontend, API et Worker |
+| **EC2 Database** | `ecom-database` | Instance hébergeant la base de données PostgreSQL |
+| **Key Pair** | `ecom-deployer-key` | Clé SSH OpenSSH pour la gestion des instances |
+
+---
+
+## 🚀 Démarrage Rapide
+
+### 1. Prérequis
+- Docker Desktop en cours d'exécution.
+- LocalStack actif sur le port `4566` (via votre conteneur `localstack-aws` ou `docker compose up -d localstack`).
+- Terraform (v1.5+) et `awslocal` (optionnel mais recommandé).
+
+### 2. Configuration d'environnement
+Copier le fichier d'exemple si ce n'est pas déjà fait :
 ```bash
 cp .env.example .env
+```
+
+### 3. Provisionnement de l'infrastructure Cloud avec Terraform
+Exécuter le script de déploiement automatique :
+```bash
+./scripts/deploy.sh
+```
+*Ou manuellement via Terraform :*
+```bash
+terraform -chdir=terraform init
+terraform -chdir=terraform apply -auto-approve
+```
+
+### 4. Lancement des conteneurs applicatifs
+```bash
 docker compose up -d --build
 ```
 
-## Services
+---
 
-| Service  | Port | Rôle |
-|----------|------|------|
-| backend  | 3000 | API REST (Gestion des produits, authentification et commandes)
-| worker   | —    | Traitement asynchrone des commandes en arrière-plan
-| frontend | 8080 | Interface web client et espace administrateur
-| postgres | —    | Base de données relationnelle PostgreSQL 18 (non exposée)
+## 🔍 Audit & Vérification des Ressources (`awslocal`)
 
-## Vérifier que tout fonctionne
-1. Ouvrir **http://localhost:8080** pour accéder au catalogue et tester l'interface.
-2. Effectuer une requête de test `curl` pour simuler une création de commande :
+Un script de vérification complet est disponible :
+```bash
+./scripts/verify.sh
+```
+
+Ou vous pouvez interroger directement LocalStack avec les commandes AWS CLI :
+
+- **Vérifier les instances EC2 en cours d'exécution :**
+  ```bash
+  awslocal ec2 describe-instances --query "Reservations[*].Instances[*].[InstanceId,State.Name,Tags[?Key=='Name'].Value|[0],PrivateIpAddress,PublicIpAddress]" --output table
+  ```
+
+- **Vérifier le VPC et les Subnets :**
+  ```bash
+  awslocal ec2 describe-vpcs --filters "Name=tag:Name,Values=ecom-vpc"
+  awslocal ec2 describe-subnets --filters "Name=tag:ManagedBy,Values=Terraform"
+  ```
+
+- **Vérifier les Security Groups :**
+  ```bash
+  awslocal ec2 describe-security-groups --filters "Name=group-name,Values=ecom-*"
+  ```
+
+- **Vérifier le rôle IAM et le profil d'instance :**
+  ```bash
+  awslocal iam list-roles --query "Roles[?RoleName=='ecom-ec2-role']"
+  awslocal iam list-instance-profiles
+  ```
+
+- **Lister le contenu du Bucket S3 et les factures :**
+  ```bash
+  awslocal s3 ls
+  awslocal s3 ls s3://ecom-localstack-storage/invoices/
+  ```
+
+---
+
+## 🛒 Tester le Cycle de Commande et l'Intégration S3
+
+1. **Vérifier le statut de l'intégration AWS / S3 via l'API :**
+   ```bash
+   curl http://localhost:3000/api/aws/status
+   ```
+   *Réponse attendue :*
+   ```json
+   {
+     "status": "online",
+     "aws_region": "us-east-1",
+     "aws_endpoint": "http://localhost:4566",
+     "s3_bucket": "ecom-localstack-storage",
+     "s3_healthy": true
+   }
+   ```
+
+2. **Se connecter pour obtenir un token JWT :**
+   ```bash
+   TOKEN=$(curl -s -X POST http://localhost:3000/api/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"admin@test.com","password":"admin123"}' | grep -o '"token":"[^"]*' | cut -d'"' -f4)
+   ```
+
+3. **Passer une commande :**
    ```bash
    curl -X POST http://localhost:3000/api/orders \
      -H "Content-Type: application/json" \
-     -H "Authorization: Bearer VOTRE_TOKEN_JWT" \
+     -H "Authorization: Bearer $TOKEN" \
      -d '{"items": [{"product_id": 1, "quantity": 1}], "shipping_address": "12 rue de la Paix, Paris"}'
    ```
-3. Pour tester l'API via Postman :
-   - Effectuer d'abord une requête `POST /api/auth/login` (ou `/api/auth/register`) pour récupérer un **Token JWT**.
-   - Ajouter l'en-tête `Authorization: Bearer <votre_token>` dans vos requêtes protégées (comme `GET /api/orders`, qui filtre automatiquement les commandes de l'utilisateur connecté).
+   *L'API génère automatiquement la facture PDF et la téléverse vers S3 LocalStack (`invoices/facture-<ID>.pdf`).*
 
-- Lister les utilisateurs dans la BDD : 
-`docker exec -it ecom_postgres psql -U postgres -d ecom_db -c "SELECT * FROM users;"`
-
-- Lister les produits
-` docker exec -it ecom_postgres psql -U postgres -d ecom_db -c "SELECT * FROM products;" `
-
-- Lister toutes les commandes
-`docker exec -it ecom_postgres psql -U postgres -d ecom_db -c "SELECT * FROM orders;" `
-
-
-
-4. Rafraîchir l'interface admin pour vérifier que la commande apparaît.
-
-5. Consulter les logs du worker pour valider son traitement asynchrone :
+4. **Télécharger la facture officielle directement depuis S3 :**
    ```bash
-   docker compose logs worker
+   curl -O -H "Authorization: Bearer $TOKEN" http://localhost:3000/api/orders/1/invoice
    ```
 
-6. Changement de statut d'une commande (Admin) & Simulation d'E-mail
-Pour tester la mise à jour du statut d'une commande et vérifier le déclenchement de la notification par e-mail :
+5. **Accéder à l'interface d'administration :**
+   - Ouvrir **http://localhost:8080/admin.html**
+   - Se connecter avec `admin@test.com` / `admin123`
+   - Dans le tableau des commandes, cliquer sur **"📄 Télécharger (S3)"** pour récupérer la facture PDF stockée sur LocalStack.
 
-- **Méthode** : `PUT`
-- **URL** : `http://localhost:3000/api/admin/orders/:id/status` *(remplacer `:id` par l'identifiant de la commande, ex: `1`)*
-- **Header** : `Authorization: Bearer <token_jwt_administrateur>`
-- **Body (JSON)** :
-    ```json
-        {
-            "status": "shipped"
-        }
-    ```
-#### Vérification de la simulation d'email
-```bash docker logs -f ecom_backend```
+---
 
-## Arrêt
-```bash
-docker compose down        # Arrête tous les conteneurs et réseaux
-docker compose down -v     # Arrête tout et supprime les données persistées du volume
-```
+## 🛑 Arrêt & Nettoyage
+
+- Arrêter les conteneurs :
+  ```bash
+  docker compose down
+  ```
+- Détruire l'infrastructure Terraform si souhaité :
+  ```bash
+  terraform -chdir=terraform destroy -auto-approve
+  ```

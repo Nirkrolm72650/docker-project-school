@@ -1,2 +1,12 @@
 .env
 node_modules/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+terraform/ecom_key
+
+# LocalStack
+localstack_data/
