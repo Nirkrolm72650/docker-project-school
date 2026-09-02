@@ -39,9 +39,8 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       EMAIL_USER: ${EMAIL_USER}
       EMAIL_PASS: ${EMAIL_PASS}
-<<<<<<< HEAD
       PDF_SERVICE_URL: ${PDF_SERVICE_URL}
-=======
+
       AWS_REGION: ${AWS_REGION:-us-east-1}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
@@ -49,7 +48,6 @@ services:
       S3_BUCKET_NAME: ${S3_BUCKET_NAME:-ecom-localstack-storage}
     extra_hosts:
       - "host.docker.internal:host-gateway"
->>>>>>> 177955d (Ajout de terraform + code pour AWS)
     ports:
       - "3000:3000"
     env_file:
