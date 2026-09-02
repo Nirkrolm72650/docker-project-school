@@ -198,9 +198,9 @@ app.post('/api/orders', verifyToken, async (req, res) => {
         });
       }
 
-<<<<<<< HEAD
       // --- APPEL AU MICRO-SERVICE PDF DISTANT (via Docker) ---
-      const pdfResponse = await fetch(process.env.PDF_SERVICE_URL || 'http://pdf-service:4000/generate-invoice', {
+      const pdfUrl = process.env.PDF_SERVICE_URL || 'http://pdf-service:4000/generate-invoice';
+      const pdfResponse = await fetch(pdfUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ order, user, items: itemsForPDF })
@@ -208,11 +208,6 @@ app.post('/api/orders', verifyToken, async (req, res) => {
 
       if (!pdfResponse.ok) throw new Error('Erreur lors de la génération du PDF par le micro-service.');
       const pdfBuffer = Buffer.from(await pdfResponse.arrayBuffer());
-      // --------------------------------------------------------
-
-      // Envoi de l'e-mail avec la pièce jointe reçue du micro-service
-=======
-      const pdfBuffer = await generateInvoicePDF(order, user, itemsForPDF);
 
       // Upload de la facture vers S3 LocalStack
       let s3Result = null;
@@ -221,8 +216,6 @@ app.post('/api/orders', verifyToken, async (req, res) => {
       } catch (s3Err) {
         console.warn('[S3 WARNING] Impossible d\'uploader la facture dans S3:', s3Err.message);
       }
-
->>>>>>> 177955d (Ajout de terraform + code pour AWS)
       await sendEmailWithAttachment(
         user.email,
         `Facture de votre commande #${order.id}`,
