@@ -1,12 +1,14 @@
-# E-Commerce Cloud Platform - LocalStack & Terraform
+# E-Commerce Cloud Platform — LocalStack & Terraform (`migration-cloud`)
 
-Plateforme e-commerce conteneurisée et migrée vers une infrastructure cloud locale **AWS / LocalStack**, entièrement modélisée et provisionnée en **Infrastructure as Code (IaC)** avec **Terraform**.
+Plateforme e-commerce multi-services conteneurisée et migrée vers une architecture cloud **AWS émulée sous LocalStack**, entièrement modélisée et provisionnée en **Infrastructure as Code (IaC)** avec **Terraform** (`tflocal`).
+
+Ce dépôt contient le code applicatif ainsi que le livrable d'évaluation officiel dans le dossier [migration-cloud/](file:///Users/brandon/Desktop/docker-project-school/migration-cloud/).
 
 ---
 
 ## 🏛️ Architecture Cloud (LocalStack)
 
-L'application s'appuie sur une infrastructure AWS complète émulée par LocalStack :
+L'application s'appuie sur une infrastructure AWS complète provisionnée via Terraform :
 
 ```
 +-----------------------------------------------------------------------------------+
@@ -14,28 +16,28 @@ L'application s'appuie sur une infrastructure AWS complète émulée par LocalSt
 |                                                                                   |
 |  +-----------------------------------------------------------------------------+  |
 |  | VPC : ecom-vpc (10.0.0.0/16) - DNS Hostnames & Support Enabled              |  |
-|  | Internet Gateway : ecom-igw                                                 |  |
 |  |                                                                             |  |
-|  |  +-------------------------------------+ +-------------------------------+  |  |
-|  |  | Public Subnet (10.0.1.0/24)         | | Private Subnet (10.0.2.0/24)      |  |  |
-|  |  | AZ: us-east-1a                      | | AZ: us-east-1b                    |  |  |
-|  |  | Route Table -> IGW (0.0.0.0/0)      | | Table de routage interne          |  |  |
-|  |  |                                     | |                               |  |  |
-|  |  |  [EC2: ecom-web-app]                | |  [EC2: ecom-database]         |  |  |
-|  |  |  - IP: 10.0.1.4 (Public IP dispo)   | |  - IP: 10.0.2.4 (Isolée)      |  |  |
-|  |  |  - Frontend Web (Port 80/8080)      | |  - PostgreSQL (Port 5432)     |  |  |
-|  |  |  - Backend API (Port 3000)          | |  - SG: ecom-db-sg             |  |  |
-|  |  |  - Worker asynchrone                | |    (Ingress réservé Backend)  |  |  |
-|  |  |  - SG: frontend-sg & backend-sg     | +-------------------------------+  |  |
-|  |  |  - IAM Profile: ec2-profile         |                                    |  |
-|  |  +-----------------|-------------------+                                    |  |
-|  +--------------------|--------------------------------------------------------+  |
-|                       |                                                           |
-|                       v IAM Role & Policy (s3:PutObject, s3:GetObject, s3:List)   |
+|  |  +-----------------------------------------------------------------------+  |  |
+|  |  | Subnet : ecom-subnet (10.0.1.0/24) - us-east-1a                          |  |  |
+|  |  | Security Group Unique : ecom-sg                                         |  |  |
+|  |  |   - Ingress Public (0.0.0.0/0) : Port 8080 (Frontend) & 3000 (Backend)   |  |  |
+|  |  |   - Ingress Interne (self = true) : Port 5432 (Postgres) & 4000 (PDF)   |  |  |
+|  |  |                                                                       |  |  |
+|  |  |  [EC2: ecom-frontend]       [EC2: ecom-backend]                       |  |  |
+|  |  |  - Nginx UI (Port 8080)     - API REST (Port 3000)                    |  |  |
+|  |  |                             - IAM Profile: ecom-instance-profile      |  |  |
+|  |  |                                                                       |  |  |
+|  |  |  [EC2: ecom-pdf-service]    [EC2: ecom-worker]    [EC2: ecom-postgres]|  |  |
+|  |  |  - Rendu PDF (Port 4000)    - Worker asynchrone   - Port 5432         |  |  |
+|  |  |                                                   - Disque EBS:       |  |  |
+|  |  |                                                     ecom-pgdata (10G) |  |  |
+|  |  +-----------------------------------|-----------------------------------+  |  |
+|  +--------------------------------------|--------------------------------------+  |
+|                                         |                                         |
+|                                         v IAM Role: ecom-role (s3:Put, Get, List) |
 |  +-----------------------------------------------------------------------------+  |
-|  | S3 BUCKET : ecom-localstack-storage                                         |  |
-|  | ├── invoices/  (Factures PDF générées automatiquement à la commande)        |  |
-|  | └── products/  (Assets et images des articles)                              |  |
+|  | S3 BUCKET : ecom-invoices                                                   |  |
+|  | └── invoices/  (Factures PDF générées automatiquement à chaque commande)     |  |
 |  +-----------------------------------------------------------------------------+  |
 +-----------------------------------------------------------------------------------+
 ```
@@ -46,19 +48,14 @@ L'application s'appuie sur une infrastructure AWS complète émulée par LocalSt
 
 | Ressource AWS | Nom / Identifiant | Description |
 |---|---|---|
-| **VPC** | `ecom-vpc` (`10.0.0.0/16`) | Réseau virtuel isolé avec résolution DNS activée |
-| **Subnet Public** | `ecom-public-subnet` (`10.0.1.0/24`) | Héberge les points d'accès Web et API |
-| **Subnet Privé** | `ecom-private-subnet` (`10.0.2.0/24`) | Héberge la base de données PostgreSQL |
-| **Internet Gateway** | `ecom-igw` | Passerelle de sortie Internet pour le sous-réseau public |
-| **Security Group** | `ecom-frontend-sg` | Ports autorisés : 80, 8080, 22 (SSH) |
-| **Security Group** | `ecom-backend-sg` | Port 3000 (API REST) et 22 |
-| **Security Group** | `ecom-db-sg` | Port 5432 autorisé strictement depuis le `backend-sg` |
-| **IAM Role & Policy** | `ecom-ec2-role` / `ecom-s3-access-policy` | Rôle EC2 avec droits de lecture/écriture sur S3 |
-| **Instance Profile** | `ecom-ec2-instance-profile` | Profil d'instance associé aux serveurs EC2 |
-| **S3 Bucket** | `ecom-invoices` | Stockage des factures PDF (`invoices/`) et médias |
-| **EC2 Web & App** | `ecom-web-app` | Instance hébergeant Frontend, API et Worker |
-| **EC2 Database** | `ecom-database` | Instance hébergeant la base de données PostgreSQL |
-| **Key Pair** | `ecom-deployer-key` | Clé SSH OpenSSH pour la gestion des instances |
+| **VPC** | `ecom-vpc` (`10.0.0.0/16`) | Réseau virtuel isolé avec résolution DNS activée via `modules/reseau` |
+| **Subnet** | `ecom-subnet` (`10.0.1.0/24`) | Sous-réseau hébergeant l'ensemble des instances applicatives |
+| **Security Group** | `ecom-sg` | **Public** : 8080, 3000 (`0.0.0.0/0`) \| **Interne** : 5432, 4000 (`self = true`) |
+| **IAM Role & Policy** | `ecom-role` / `ecom-s3-policy` | Rôle EC2 avec droits de lecture/écriture restreints sur le bucket S3 |
+| **Instance Profile** | `ecom-instance-profile` | Profil d'instance rattaché uniquement au serveur backend |
+| **S3 Bucket** | `ecom-invoices` | Stockage persistant des factures PDF de commande |
+| **5 Instances EC2** | `ecom-*` | Une instance par service (`frontend`, `backend`, `pdf-service`, `postgres`, `worker`) |
+| **Volume EBS** | `ecom-pgdata` | Disque de 10 Go attaché sur `/dev/sdh` à l'instance PostgreSQL |
 
 ---
 
@@ -66,8 +63,8 @@ L'application s'appuie sur une infrastructure AWS complète émulée par LocalSt
 
 ### 1. Prérequis
 - Docker Desktop en cours d'exécution.
-- LocalStack actif sur le port `4566` (via votre conteneur `localstack-aws` ou `docker compose up -d localstack`).
-- Terraform (v1.5+) et `awslocal` (optionnel mais recommandé).
+- LocalStack actif sur le port `4566` (conteneur `localstack-aws`).
+- `tflocal` et `awslocal` installés.
 
 ### 2. Configuration d'environnement
 Copier le fichier d'exemple si ce n'est pas déjà fait :
@@ -75,15 +72,12 @@ Copier le fichier d'exemple si ce n'est pas déjà fait :
 cp .env.example .env
 ```
 
-### 3. Provisionnement de l'infrastructure Cloud avec Terraform
-Exécuter le script de déploiement automatique :
+### 3. Provisionnement de l'infrastructure Cloud (`migration-cloud`)
 ```bash
-./scripts/deploy.sh
-```
-*Ou manuellement via Terraform :*
-```bash
-terraform -chdir=terraform init
-terraform -chdir=terraform apply -auto-approve
+cd migration-cloud
+tflocal init
+tflocal apply -auto-approve
+cd ..
 ```
 
 ### 4. Lancement des conteneurs applicatifs
@@ -95,46 +89,45 @@ docker compose up -d --build
 
 ## 🔍 Audit & Vérification des Ressources (`awslocal`)
 
-Un script de vérification complet est disponible :
-```bash
-./scripts/verify.sh
-```
+Vous pouvez exécuter directement les 4 commandes de vérification de l'Étape 6 du Capstone :
 
-Ou vous pouvez interroger directement LocalStack avec les commandes AWS CLI :
+1. **Vérifier les 5 instances EC2 en statut `running` :**
+   ```bash
+   awslocal ec2 describe-instances \
+     --filters "Name=tag:Project,Values=ecom" \
+     --query 'Reservations[].Instances[].{Nom:Tags[?Key==`Name`]|[0].Value,Etat:State.Name,Type:InstanceType}' \
+     --output table
+   ```
 
-- **Vérifier les instances EC2 en cours d'exécution :**
-  ```bash
-  awslocal ec2 describe-instances --query "Reservations[*].Instances[*].[InstanceId,State.Name,Tags[?Key=='Name'].Value|[0],PrivateIpAddress,PublicIpAddress]" --output table
-  ```
+2. **Vérifier le Security Group (Public `0.0.0.0/0` vs Interne `self = true`) :**
+   ```bash
+   awslocal ec2 describe-security-groups \
+     --filters "Name=group-name,Values=ecom-sg" \
+     --query 'SecurityGroups[0].IpPermissions[].{Port:FromPort,Public:IpRanges[0].CidrIp,Interne:UserIdGroupPairs[0].GroupId}' \
+     --output table
+   ```
 
-- **Vérifier le VPC et les Subnets :**
-  ```bash
-  awslocal ec2 describe-vpcs --filters "Name=tag:Name,Values=ecom-vpc"
-  awslocal ec2 describe-subnets --filters "Name=tag:ManagedBy,Values=Terraform"
-  ```
+3. **Vérifier le bucket S3 et le volume EBS attaché à Postgres :**
+   ```bash
+   awslocal s3 ls
+   awslocal ec2 describe-volumes \
+     --query 'Volumes[].{Id:VolumeId,Taille:Size,Attache:Attachments[0].InstanceId}' \
+     --output table
+   ```
 
-- **Vérifier les Security Groups :**
-  ```bash
-  awslocal ec2 describe-security-groups --filters "Name=group-name,Values=ecom-*"
-  ```
-
-- **Vérifier le rôle IAM et le profil d'instance :**
-  ```bash
-  awslocal iam list-roles --query "Roles[?RoleName=='ecom-ec2-role']"
-  awslocal iam list-instance-profiles
-  ```
-
-- **Lister le contenu du Bucket S3 et les factures :**
-  ```bash
-  awslocal s3 ls
-  awslocal s3 ls s3://ecom-localstack-storage/invoices/
-  ```
+4. **Vérifier l'état Terraform :**
+   ```bash
+   cd migration-cloud
+   tflocal state list
+   tflocal output
+   cd ..
+   ```
 
 ---
 
 ## 🛒 Tester le Cycle de Commande et l'Intégration S3
 
-1. **Vérifier le statut de l'intégration AWS / S3 via l'API :**
+1. **Vérifier la santé du bucket S3 depuis le backend :**
    ```bash
    curl http://localhost:3000/api/aws/status
    ```
@@ -144,7 +137,7 @@ Ou vous pouvez interroger directement LocalStack avec les commandes AWS CLI :
      "status": "online",
      "aws_region": "us-east-1",
      "aws_endpoint": "http://localhost:4566",
-     "s3_bucket": "ecom-localstack-storage",
+     "s3_bucket": "ecom-invoices",
      "s3_healthy": true
    }
    ```
@@ -163,7 +156,7 @@ Ou vous pouvez interroger directement LocalStack avec les commandes AWS CLI :
      -H "Authorization: Bearer $TOKEN" \
      -d '{"items": [{"product_id": 1, "quantity": 1}], "shipping_address": "12 rue de la Paix, Paris"}'
    ```
-   *L'API génère automatiquement la facture PDF et la téléverse vers S3 LocalStack (`invoices/facture-<ID>.pdf`).*
+   *L'API fait appel au micro-service PDF, génère la facture et la téléverse automatiquement vers S3 LocalStack (`invoices/facture-<ID>.pdf`).*
 
 4. **Télécharger la facture officielle directement depuis S3 :**
    ```bash
@@ -204,13 +197,12 @@ docker compose up -d --build
 
 ---
 
-## 🛑 Arrêt & Nettoyage
+## 📂 Contenu du Rendu & Documentation
 
-- Arrêter les conteneurs :
-  ```bash
-  docker compose down
-  ```
-- Détruire l'infrastructure Terraform :
-  ```bash
-  cd migration-cloud && tflocal destroy -auto-approve
-  ```
+- [migration-cloud/](file:///Users/brandon/Desktop/docker-project-school/migration-cloud/) : Dossier officiel d'évaluation du Capstone :
+  - `INVENTAIRE.md` : Tableau des services, réseau, stockage et stratégies de migration.
+  - `main.tf` : Code Terraform complet (Sections 4.1 à 4.8).
+  - `modules/reseau/` : Module réutilisable VPC + Subnet.
+  - `PREUVES.md` : Sorties réelles des commandes d'audit.
+  - `README.md` : Instructions de démarrage concises.
+- [oral.md](file:///Users/brandon/Desktop/docker-project-school/oral.md) : Fiche de révision et support de soutenance pour l'oral (pitch, démonstration, questions pièges et passage au vrai AWS).
