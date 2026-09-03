@@ -55,7 +55,7 @@ L'application s'appuie sur une infrastructure AWS complète émulée par LocalSt
 | **Security Group** | `ecom-db-sg` | Port 5432 autorisé strictement depuis le `backend-sg` |
 | **IAM Role & Policy** | `ecom-ec2-role` / `ecom-s3-access-policy` | Rôle EC2 avec droits de lecture/écriture sur S3 |
 | **Instance Profile** | `ecom-ec2-instance-profile` | Profil d'instance associé aux serveurs EC2 |
-| **S3 Bucket** | `ecom-localstack-storage` | Stockage des factures PDF (`invoices/`) et médias |
+| **S3 Bucket** | `ecom-invoices` | Stockage des factures PDF (`invoices/`) et médias |
 | **EC2 Web & App** | `ecom-web-app` | Instance hébergeant Frontend, API et Worker |
 | **EC2 Database** | `ecom-database` | Instance hébergeant la base de données PostgreSQL |
 | **Key Pair** | `ecom-deployer-key` | Clé SSH OpenSSH pour la gestion des instances |
@@ -177,13 +177,40 @@ Ou vous pouvez interroger directement LocalStack avec les commandes AWS CLI :
 
 ---
 
+## 🔄 Recommencer tout de zéro (Reset complet)
+
+Pour faire table rase et reconstruire l'ensemble de l'infrastructure Cloud et de l'application :
+
+### 1. Tout détruire et nettoyer
+```bash
+# Détruire l'infrastructure Terraform
+cd migration-cloud && tflocal destroy -auto-approve && cd ..
+
+# Supprimer les conteneurs et volumes applicatifs
+docker compose down -v
+
+# Redémarrer LocalStack pour vider son état
+docker restart localstack-aws
+```
+
+### 2. Tout relancer
+```bash
+# Provisionner l'infrastructure Cloud avec Terraform
+cd migration-cloud && tflocal init && tflocal apply -auto-approve && cd ..
+
+# Lancer l'application conteneurisée
+docker compose up -d --build
+```
+
+---
+
 ## 🛑 Arrêt & Nettoyage
 
 - Arrêter les conteneurs :
   ```bash
   docker compose down
   ```
-- Détruire l'infrastructure Terraform si souhaité :
+- Détruire l'infrastructure Terraform :
   ```bash
-  terraform -chdir=terraform destroy -auto-approve
+  cd migration-cloud && tflocal destroy -auto-approve
   ```
