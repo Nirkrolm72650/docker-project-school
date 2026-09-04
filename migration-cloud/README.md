@@ -6,12 +6,27 @@ Ce dossier contient l'infrastructure cloud complète pour migrer l'application e
 
 ## 🚀 Démarrage rapide
 
+### 0. Prérequis : Démarrer LocalStack
+LocalStack joue le rôle du Cloud AWS et **doit être actif sur le port `4566`** avant de lancer Terraform :
+
 ```bash
-# 1. Déployer l'infrastructure Cloud avec Terraform
+# Vérifier si LocalStack tourne déjà
+docker ps --filter name=localstack
+
+# Si LocalStack n'est pas encore démarré :
+localstack start -d
+# ou directement avec Docker :
+docker run -d -p 4566:4566 -e LOCALSTACK_AUTH_TOKEN=<VOTRE_TOKEN> --name localstack-aws localstack/localstack
+```
+
+### 1. Déployer l'infrastructure Cloud avec Terraform
+```bash
 tflocal init
 tflocal apply -auto-approve
+```
 
-# 2. Lancer l'application conteneurisée (depuis la racine du projet)
+### 2. Lancer l'application conteneurisée (depuis la racine du projet)
+```bash
 cd ..
 docker compose up -d --build
 ```

@@ -61,10 +61,20 @@ L'application s'appuie sur une infrastructure AWS complète provisionnée via Te
 
 ## 🚀 Démarrage Rapide
 
-### 1. Prérequis
-- Docker Desktop en cours d'exécution.
-- LocalStack actif sur le port `4566` (conteneur `localstack-aws`).
-- `tflocal` et `awslocal` installés.
+### 1. Prérequis : Démarrer LocalStack
+LocalStack émule les services AWS et **doit être démarré en premier** sur le port `4566` :
+
+```bash
+# Vérifier si LocalStack tourne déjà :
+docker ps --filter name=localstack
+
+# Si LocalStack n'est pas démarré, le lancer avec la CLI :
+localstack start -d
+# Ou directement via Docker :
+docker run -d -p 4566:4566 -e LOCALSTACK_AUTH_TOKEN=<VOTRE_TOKEN> --name localstack-aws localstack/localstack
+```
+
+*Outils requis : Docker Desktop, `tflocal` et `awslocal`.*
 
 ### 2. Configuration d'environnement
 Copier le fichier d'exemple si ce n'est pas déjà fait :
