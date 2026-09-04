@@ -1,5 +1,6 @@
 .env
 node_modules/
+.DS_Store
 
 # Terraform
 .terraform/
@@ -10,3 +11,6 @@ terraform/ecom_key
 
 # LocalStack
 localstack_data/
+
+# Archives locales
+archive/
